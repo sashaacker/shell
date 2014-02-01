@@ -1,0 +1,170 @@
+#!/bin/bash
+
+if [ -z `type -t virtualenv` ]
+then
+    echo "Error: quickstart requires virtualenv to be installed" >&2
+    exit 1
+fi
+if [ -z `type -t git` ]
+then
+    echo "Error: quickstart requires git to be installed" >&2
+    exit 1
+fi
+
+VENV_WRAPPER=false
+VENV_WRAPPER_PROJECT=false
+ROOT=$PWD
+YEAR=$(date +%Y)
+REALNAME=$(grep $USER /etc/passwd | cut -d':' -f 5 | cut -d',' -f 1)
+
+while getopts ":wpr:" opt; do
+    case $opt in
+        w)
+            if [ -n `type -t mkvirtualenv` ]
+            then
+                VENV_WRAPPER=true
+            else
+                echo "Error: Use of virtualenv wrapper requires virtualenv wrapper to be installed" >&2
+                exit 1
+            fi
+            ;;
+        p)
+            if [ -n `type -t mkproject` ]
+            then
+                VENV_WRAPPER_PROJECT=true
+            else
+                echo "VENV Project requires VENV Wrapper." >&2
+                exit 1
+            fi
+            ;;
+        r)
+            if $VENV_WRAPPER_PROJECT
+            then
+                echo "Cannot set root directory when using a wrapper project" >&2
+                exit 1
+            elif [ -d ${OPTARG} ]
+            then
+                ROOT=${OPTARG}
+            else
+                echo "Cannot set root directory"
+                exit 1
+            fi
+            ;;
+        \?)
+            echo "Invalid option: -$OPTARG" >&2
+            exit 1
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+if [ -z $1 ]
+then
+    echo "Must provide a project name"
+    exit 1
+else
+    NAME=$1
+fi
+
+if $VENV_WRAPPER_PROJECT
+then
+    mkproject $NAME
+    git init
+elif $VENV_WRAPPER
+then
+    mkvirtualenv $NAME
+    cd $ROOT
+    mkdir $NAME
+    cd $NAME
+    git init
+else
+    cd $ROOT
+    mkdir $NAME
+    cd $NAME
+    virtualenv .venv
+    source .venv/bin/activate
+    git init
+fi
+
+read -a DIRS <<<"$NAME $NAME/tests docs"
+read -a FILES <<<"$NAME/__init__.py $NAME/tests/__init__.py setup.py README.rst requirements.txt"
+for D in ${DIRS[@]}
+do
+    mkdir $D
+done
+for F in ${FILES[@]}
+do
+    touch $F
+    git add $F
+done
+
+LICENSE=$(cat <<'EOF_L'
+The MIT License (MIT)
+
+Copyright (c) $YEAR $REALNAME
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+EOF_L
+)
+
+echo "$LICENSE" > LICENSE
+git add LICENSE
+
+IGNORE=$(cat <<'EOF_G'
+_trial_temp
+*.py[cod]
+*.db
+*.so
+*.dll
+*.egg
+*.egg-info
+dist
+build
+eggs
+parts
+var
+sdist
+develop-eggs
+lib
+lib64
+__pycache__
+pip-log.txt
+.coverage
+.tox
+nosetests.xml
+*~
+.*.sw[nop]
+*.log
+*.pid
+config.ini
+.ropeproject
+docs/build
+.venv
+___*.py
+Data.fs*
+test.py
+EOF_G
+)
+
+echo "$IGNORE" > .gitignore
+git add .gitignore
+
+pip install sphinx
+pip freeze > dev-requirements.txt
+git add dev-requirements.txt
+git commit -m 'Initial Commit'
